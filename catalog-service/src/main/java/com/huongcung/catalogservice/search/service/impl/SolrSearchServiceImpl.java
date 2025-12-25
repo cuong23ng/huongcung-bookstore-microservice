@@ -1,0 +1,396 @@
+package com.huongcung.catalogservice.search.service.impl;
+
+import com.huongcung.catalogservice.catalog.enumeration.BookStatus;
+import com.huongcung.catalogservice.catalog.model.dto.BookDTO;
+import com.huongcung.catalogservice.catalog.service.BookService;
+import com.huongcung.catalogservice.search.model.dto.SearchResponse;
+import com.huongcung.catalogservice.common.dto.PaginationInfo;
+import com.huongcung.catalogservice.search.model.dto.SearchFacet;
+import com.huongcung.catalogservice.search.model.dto.SearchRequest;
+import com.huongcung.catalogservice.search.repository.BookSearchRepository;
+import com.huongcung.catalogservice.search.service.SearchService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.solr.client.solrj.response.QueryResponse;
+import org.apache.solr.client.solrj.response.SuggesterResponse;
+import org.apache.solr.client.solrj.response.Suggestion;
+import org.apache.solr.common.SolrDocumentList;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.annotation.Primary;
+import org.springframework.stereotype.Service;
+
+import java.util.*;
+import java.util.stream.Collectors;
+
+/**
+ * Implementation of SearchService using Solr with fallback to database search
+ */
+@Primary
+@Service
+@Slf4j
+@RequiredArgsConstructor
+public class SolrSearchServiceImpl implements SearchService {
+    
+    private final BookSearchRepository bookSearchRepository;
+    private final BookService bookService;
+    private final DatabaseSearchServiceImpl databaseSearchService;
+    
+    @Override
+//    @Cacheable(value = "searchResults", key = "#request.toString()", unless = "#result.fallbackUsed == true")
+    public SearchResponse searchBooks(SearchRequest request) {
+        long startTime = System.currentTimeMillis();
+        
+        try {
+            log.info("Searching books with query: '{}', filters: {}", request.getQ(), buildFilterLog(request));
+            
+            // Build Solr query (pass unescaped query - repository will handle escaping for fuzzy search)
+            // Note: We pass the raw query string to allow the repository to build fuzzy queries properly
+            String queryString = request.getQ() != null ? request.getQ() : "*:*";
+            Map<String, String> filters = buildFilters(request);
+            List<String> facetFields = Arrays.asList("genreNames", "language", "format");
+            
+            int start = (request.getPage() - 1) * request.getSize();
+            int rows = request.getSize();
+            
+            // Parse sort parameter
+            String sortField = parseSortField(request.getSort());
+            String sortOrder = parseSortOrder(request.getSort());
+            
+            // Execute Solr search
+            QueryResponse solrResponse = bookSearchRepository.searchWithFacets(
+                queryString, filters, facetFields, sortField, sortOrder, start, rows);
+            
+            // Process results
+            SearchResponse response = processSolrResponse(solrResponse, request);
+            
+            long executionTime = System.currentTimeMillis() - startTime;
+            response.setExecutionTimeMs(executionTime);
+            response.setFallbackUsed(false);
+            
+            log.info("Search completed in {}ms. Found {} results", executionTime, response.getPagination().getTotalResults());
+            
+            return response;
+            
+        } catch (Exception e) {
+            log.warn("Solr search failed, falling back to database search: {}", e.getMessage());
+            SearchResponse fallbackResponse = databaseSearchService.searchBooks(request);
+            return fallbackResponse;
+        }
+    }
+    
+    @Override
+//    @Cacheable(value = "searchSuggestions", key = "#query")
+    public List<String> getSuggestions(String query) {
+        try {
+            log.info("Getting suggestions for query: '{}'", query);
+            
+            SuggesterResponse suggesterResponse = bookSearchRepository.getSuggestions(query, 10);
+            
+            List<String> suggestions = Collections.emptyList();
+            if (suggesterResponse != null && suggesterResponse.getSuggestions() != null) {
+                suggestions = suggesterResponse.getSuggestions().values().stream()
+                    .flatMap(Collection::stream)
+                    .map(Suggestion::getTerm)
+                    .limit(10)
+                    .collect(Collectors.toList());
+            }
+            
+            return suggestions;
+            
+        } catch (Exception e) {
+            log.warn("Solr suggestions failed: {}", e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+    
+    @Override
+    @Cacheable(value = "searchFacets", key = "#request.toString()")
+    public Map<String, List<SearchFacet>> getFacets(SearchRequest request) {
+        long startTime = System.currentTimeMillis();
+        
+        try {
+            log.debug("Getting facets for request: {}", request);
+            
+            // Pass unescaped query - repository handles escaping for fuzzy search
+            String queryString = request.getQ() != null ? request.getQ() : "*:*";
+            Map<String, String> filters = buildFilters(request);
+            List<String> facetFields = Arrays.asList("genreNames", "language", "format");
+            
+            String sortField = parseSortField(request.getSort());
+            String sortOrder = parseSortOrder(request.getSort());
+            
+            QueryResponse solrResponse = bookSearchRepository.searchWithFacets(
+                queryString, filters, facetFields, sortField, sortOrder, 0, 0);
+            
+            Map<String, List<SearchFacet>> facets = extractFacets(solrResponse);
+            
+            return facets;
+            
+        } catch (Exception e) {
+            log.warn("Solr facets failed: {}", e.getMessage());
+            return Collections.emptyMap();
+        }
+    }
+    
+    /**
+     * Process Solr query response into SearchResponse
+     */
+    private SearchResponse processSolrResponse(QueryResponse solrResponse, SearchRequest request) {
+        SolrDocumentList documents = solrResponse.getResults();
+        
+        // Extract book IDs from Solr results (with null safety)
+        List<String> bookIds = documents.stream()
+            .map(doc -> {
+                Object idValue = doc.getFieldValue("id");
+                return idValue != null ? idValue.toString() : null;
+            })
+            .filter(Objects::nonNull)
+            .toList();
+
+        List<BookDTO> books = fetchBooksByIds(bookIds);
+        //TODO: Get books directly from solr, index BookStatus
+        
+        // Extract highlights
+        Map<String, String> highlights = extractHighlights(solrResponse, bookIds);
+        
+        // Extract facets
+        Map<String, List<SearchFacet>> facets = extractFacets(solrResponse);
+        
+        // Build pagination info
+        PaginationInfo pagination = PaginationInfo.builder()
+            .currentPage(request.getPage())
+            .pageSize(request.getSize())
+            .totalResults(documents.getNumFound())
+            .totalPages((int) Math.ceil((double) documents.getNumFound() / request.getSize()))
+            .hasNext(((long) request.getPage() * request.getSize()) < documents.getNumFound())
+            .hasPrevious(request.getPage() > 1)
+            .build();
+        
+        return SearchResponse.builder()
+            .books(books)
+            .facets(facets)
+            .pagination(pagination)
+            .highlightedFields(highlights)
+            .build();
+    }
+    
+    /**
+     * Fetch books from database by IDs
+     */
+    private List<BookDTO> fetchBooksByIds(List<String> bookIds) {
+        if (bookIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Set<Long> longIds = bookIds.stream()
+                .map(Long::parseLong)
+                .collect(Collectors.toSet());
+        return bookService.findByIds(longIds).stream()
+                .filter(b -> b.getStatus() == BookStatus.PUBLISHED) //TODO: index Status to solr
+                .toList();
+    }
+    
+    /**
+     * Extract highlights from Solr response
+     * Checks both standard fields (title, description) and Vietnamese fields (titleText, descriptionText)
+     */
+    private Map<String, String> extractHighlights(QueryResponse solrResponse, List<String> bookIds) {
+        Map<String, String> highlights = new HashMap<>();
+        
+        if (solrResponse.getHighlighting() != null) {
+            for (String bookId : bookIds) {
+                Map<String, List<String>> docHighlights = solrResponse.getHighlighting().get(bookId);
+                if (docHighlights != null) {
+                    // Prefer title highlight, then titleText (Vietnamese), then description, then descriptionText
+                    docHighlights.getOrDefault("title",
+                                    docHighlights.getOrDefault("titleText",
+                                            docHighlights.getOrDefault("description",
+                                                    docHighlights.getOrDefault("descriptionText", Collections.emptyList()))))
+                            .stream()
+                            .findFirst().ifPresent(highlight -> highlights.put(bookId, highlight));
+                }
+            }
+        }
+        
+        return highlights;
+    }
+    
+    /**
+     * Extract facets from Solr response
+     */
+    private Map<String, List<SearchFacet>> extractFacets(QueryResponse solrResponse) {
+        Map<String, List<SearchFacet>> facets = new HashMap<>();
+        
+        if (solrResponse.getFacetFields() != null) {
+            solrResponse.getFacetFields().forEach(facetField -> {
+                List<SearchFacet> facetList = facetField.getValues().stream()
+                    .map(count -> SearchFacet.builder()
+                        .value(count.getName())
+                        .count(count.getCount())
+                        .build())
+                    .collect(Collectors.toList());
+                facets.put(facetField.getName(), facetList);
+            });
+        }
+        
+        return facets;
+    }
+    
+    /**
+     * Build filter map from SearchRequest
+     */
+    private Map<String, String> buildFilters(SearchRequest request) {
+        Map<String, String> filters = new HashMap<>();
+        
+        // Genre filters
+        if (request.getGenres() != null && !request.getGenres().isEmpty()) {
+            String genreFilter = request.getGenres().stream()
+                .map(genre -> "\"" + genre + "\"")
+                .collect(Collectors.joining(" OR "));
+            filters.put("genreNames", "(" + genreFilter + ")");
+        }
+        
+        // Language filters
+        if (request.getLanguages() != null && !request.getLanguages().isEmpty()) {
+            String languageFilter = request.getLanguages().stream()
+                .map(lang -> "\"" + lang + "\"")
+                .collect(Collectors.joining(" OR "));
+            filters.put("language", "(" + languageFilter + ")");
+        }
+        
+        // Format filters
+        if (request.getFormats() != null && !request.getFormats().isEmpty()) {
+            String formatFilter = request.getFormats().stream()
+                .map(format -> "\"" + format + "\"")
+                .collect(Collectors.joining(" OR "));
+            filters.put("format", "(" + formatFilter + ")");
+        }
+        
+        // Price filters
+        if (request.getMinPrice() != null || request.getMaxPrice() != null) {
+            double minPrice = request.getMinPrice() != null ? request.getMinPrice() : 0.0;
+            double maxPrice = request.getMaxPrice() != null ? request.getMaxPrice() : Double.MAX_VALUE;
+            filters.put("physicalPrice", "[" + minPrice + " TO " + maxPrice + "]");
+        }
+        
+        // City availability filters
+        if (request.getCities() != null && !request.getCities().isEmpty()) {
+            for (String city : request.getCities()) {
+                String cityField = mapCityToField(city);
+                if (cityField != null) {
+                    filters.put(cityField, "true");
+                }
+            }
+        }
+        
+        return filters;
+    }
+    
+    /**
+     * Map city name to Solr field name
+     */
+    private String mapCityToField(String city) {
+        if (city == null || city.trim().isEmpty()) {
+            return null;
+        }
+        String normalized = city.trim().toUpperCase();
+        return switch (normalized) {
+            case "HANOI", "HÀ NỘI" -> "availableInHanoi";
+            case "HCMC", "HOCHIMINH", "HỒ CHÍ MINH", "HO CHI MINH" -> "availableInHcmc";
+            case "DANANG", "ĐÀ NẴNG", "DA NANG" -> "availableInDanang";
+            default -> {
+                log.warn("Unknown city name: {}, skipping filter", city);
+                yield null;
+            }
+        };
+    }
+    
+    /**
+     * Escape Solr query string to prevent injection
+     */
+    private String escapeSolrQuery(String query) {
+        if (query == null || query.trim().isEmpty()) {
+            return "*:*";
+        }
+        // Escape special Solr characters: + - && || ! ( ) { } [ ] ^ " ~ * ? : \
+        return query.replace("\\", "\\\\")
+            .replace("+", "\\+")
+            .replace("-", "\\-")
+            .replace("&&", "\\&&")
+            .replace("||", "\\||")
+            .replace("!", "\\!")
+            .replace("(", "\\(")
+            .replace(")", "\\)")
+            .replace("{", "\\{")
+            .replace("}", "\\}")
+            .replace("[", "\\[")
+            .replace("]", "\\]")
+            .replace("^", "\\^")
+            .replace("\"", "\\\"")
+            .replace("~", "\\~")
+            .replace("*", "\\*")
+            .replace("?", "\\?")
+            .replace(":", "\\:");
+    }
+    
+    /**
+     * Parse sort field from sort parameter
+     * Format: "field_order" (e.g., "price_asc", "date_desc", "relevance")
+     */
+    private String parseSortField(String sort) {
+        if (sort == null || sort.trim().isEmpty()) {
+            return null; // Use default relevance
+        }
+        String[] parts = sort.split("_");
+        String field = parts[0].toLowerCase();
+        return switch (field) {
+            case "price" -> "physicalPrice";
+            case "date", "publicationdate" -> "publicationDate";
+            case "relevance", "score" -> "score";
+            case "rating" -> "averageRating";
+            case "title" -> "title";
+            default -> {
+                log.warn("Unknown sort field: {}, using relevance", field);
+                yield null;
+            }
+        };
+    }
+    
+    /**
+     * Parse sort order from sort parameter
+     */
+    private String parseSortOrder(String sort) {
+        if (sort == null || sort.trim().isEmpty()) {
+            return "desc"; // Default to desc for relevance
+        }
+        String[] parts = sort.split("_");
+        if (parts.length > 1) {
+            String order = parts[1].toLowerCase();
+            return "desc".equals(order) ? "desc" : "asc";
+        }
+        return "desc"; // Default
+    }
+    
+    /**
+     * Build filter log string for logging
+     */
+    private String buildFilterLog(SearchRequest request) {
+        List<String> filterParts = new ArrayList<>();
+        if (request.getGenres() != null && !request.getGenres().isEmpty()) {
+            filterParts.add("genres=" + request.getGenres());
+        }
+        if (request.getLanguages() != null && !request.getLanguages().isEmpty()) {
+            filterParts.add("languages=" + request.getLanguages());
+        }
+        if (request.getFormats() != null && !request.getFormats().isEmpty()) {
+            filterParts.add("formats=" + request.getFormats());
+        }
+        if (request.getMinPrice() != null || request.getMaxPrice() != null) {
+            filterParts.add("price=[" + request.getMinPrice() + "-" + request.getMaxPrice() + "]");
+        }
+        if (request.getCities() != null && !request.getCities().isEmpty()) {
+            filterParts.add("cities=" + request.getCities());
+        }
+        return filterParts.isEmpty() ? "none" : String.join(", ", filterParts);
+    }
+}
+

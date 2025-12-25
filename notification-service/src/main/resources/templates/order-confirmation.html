@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xác nhận đơn hàng - Hương Cung Bookstore</title>
+    <style>
+        /* Reset CSS cơ bản */
+        body, p, h1, h2, h3, h4, h5, h6 { margin: 0; padding: 0; }
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; line-height: 1.6; color: #333333; background-color: #f4f4f4; -webkit-font-smoothing: antialiased; }
+
+        /* Container chính - Giới hạn chiều rộng cho email */
+        .email-wrapper { width: 100%; background-color: #f4f4f4; padding: 20px 0; }
+        .email-container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+
+        /* Header */
+        .header { background-color: #2c3e50; /* Màu xanh đen sang trọng cho sách */ color: #ffffff; padding: 30px 20px; text-align: center; }
+        .header h1 { font-size: 24px; margin-bottom: 10px; font-weight: 600; }
+        .logo-text { font-size: 18px; color: #ecf0f1; text-transform: uppercase; letter-spacing: 2px; }
+
+        /* Nội dung chính */
+        .content { padding: 30px 20px; }
+        .greeting { font-size: 16px; margin-bottom: 20px; }
+        .order-info { background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin-bottom: 25px; border-left: 4px solid #27ae60; }
+        .order-info p { margin-bottom: 5px; font-size: 14px; color: #555; }
+
+        /* Bảng danh sách sản phẩm */
+        .product-table { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
+        .product-table th { text-align: left; padding: 10px; border-bottom: 2px solid #eee; color: #7f8c8d; font-size: 12px; text-transform: uppercase; }
+        .product-table td { padding: 12px 10px; border-bottom: 1px solid #eee; font-size: 14px; vertical-align: top; }
+        .product-name { color: #2c3e50; font-weight: 600; }
+        .product-meta { font-size: 12px; color: #95a5a6; display: block; margin-top: 4px; }
+        .total-row td { border-top: 2px solid #333; font-weight: bold; font-size: 16px; padding-top: 15px; border-bottom: none; }
+        .price-col { text-align: right; white-space: nowrap; }
+
+        /* Nút Action */
+        .btn-container { text-align: center; margin: 30px 0; }
+        .btn { display: inline-block; background-color: #27ae60; color: #ffffff; text-decoration: none; padding: 12px 30px; border-radius: 4px; font-weight: bold; font-size: 16px; transition: background-color 0.3s; }
+        .btn:hover { background-color: #219150; }
+
+        /* Footer */
+        .footer { background-color: #ecf0f1; padding: 20px; text-align: center; font-size: 12px; color: #7f8c8d; }
+        .footer a { color: #2c3e50; text-decoration: none; font-weight: 600; }
+
+        /* Tiện ích */
+        .highlight { color: #e74c3c; font-weight: bold; }
+        .text-right { text-align: right; }
+
+        /* Responsive Mobile */
+        @media only screen and (max-width: 600px) {
+            .email-container { width: 100% !important; border-radius: 0; }
+            .content { padding: 20px 15px; }
+            .product-table th { display: none; } /* Ẩn header bảng trên mobile */
+            .product-table td { display: block; width: 100%; text-align: left; padding: 5px 0; border: none; }
+            .product-table tr { border-bottom: 1px solid #eee; display: block; padding: 10px 0; }
+            .price-col { text-align: left; font-weight: bold; color: #27ae60; }
+        }
+    </style>
+</head>
+<body>
+<div class="email-wrapper">
+    <div class="email-container">
+        <!-- Header -->
+        <div class="header">
+            <div class="logo-text">Hương Cung Bookstore</div>
+            <h1>Cảm ơn bạn đã đặt hàng!</h1>
+        </div>
+
+        <!-- Body Content -->
+        <div class="content">
+            <p class="greeting">Xin chào <strong th:text="${customerName}">Nguyễn Văn A</strong>,</p>
+            <p>Chúng tôi rất vui thông báo đơn hàng của bạn đã được tiếp nhận và đang được xử lý. Dưới đây là thông tin chi tiết:</p>
+
+            <!-- Order Info Box -->
+            <div class="order-info">
+                <p><strong>Mã đơn hàng:</strong> <span th:text="${orderNumber}">#HC-2023001</span></p>
+                <p><strong>Ngày đặt:</strong> <span th:text="${#temporals.format(orderDate, 'dd/MM/yyyy HH:mm')}">20/10/2023 14:30</span></p>
+                <p><strong>Địa chỉ giao hàng:</strong> <span th:text="${shippingAddress}">123 Đường Sách, Quận 1, TP.HCM</span></p>
+                <p><strong>Phương thức thanh toán:</strong> <span th:text="${paymentMethod}">Thanh toán khi nhận hàng (COD)</span></p>
+            </div>
+
+            <!-- Product List Table -->
+            <table class="product-table">
+                <thead>
+                <tr>
+                    <th width="60%">Sách</th>
+                    <th width="15%" style="text-align: center;">SL</th>
+                    <th width="25%" class="text-right">Thành tiền</th>
+                </tr>
+                </thead>
+                <tbody>
+                <!-- Loop through items using Thymeleaf -->
+                <tr th:each="item : ${orderItems}">
+                    <td>
+                        <span class="product-name" th:text="${item.bookTitle}">Nhà Giả Kim</span>
+                        <span class="product-meta" th:text="'Tác giả: ' + ${#strings.listJoin(item.authors, ', ')}">
+                            Tác giả: Paulo Coelho
+                        </span>
+                    </td>
+                    <td style="text-align: center;" th:text="${item.quantity}">1</td>
+                    <td class="price-col" th:text="${#numbers.formatDecimal(item.subTotal, 0, 'COMMA', 0, 'POINT')} + ' đ'">
+                        79.000 đ
+                    </td>
+                </tr>
+                </tbody>
+                <tfoot>
+                <tr>
+                    <td colspan="2" class="text-right" style="padding-top: 15px;">Tạm tính:</td>
+                    <td class="text-right" style="padding-top: 15px;" th:text="${#numbers.formatDecimal(subTotal, 0, 'COMMA', 0, 'POINT')} + ' đ'">150.000 đ</td>
+                </tr>
+<!--                <tr>-->
+<!--                    <td colspan="2" class="text-right">Phí vận chuyển:</td>-->
+<!--                    <td class="text-right" th:text="${#numbers.formatDecimal(shippingFee, 0, 'COMMA', 0, 'POINT')} + ' đ'">20.000 đ</td>-->
+<!--                </tr>-->
+                <tr class="total-row">
+                    <td colspan="2" class="text-right" style="color: #2c3e50;">Tổng cộng:</td>
+                    <td class="price-col highlight" th:text="${#numbers.formatDecimal(totalAmount, 0, 'COMMA', 0, 'POINT')} + ' đ'">170.000 đ</td>
+                </tr>
+                </tfoot>
+            </table>
+
+            <!-- Call to Action Button -->
+            <div class="btn-container">
+                <a th:href="@{${trackingUrl}}" class="btn">Theo dõi đơn hàng</a>
+            </div>
+
+            <p style="font-size: 14px; color: #666;">
+                Nếu bạn có bất kỳ câu hỏi nào, vui lòng trả lời email này hoặc liên hệ hotline <strong>1900 xxxx</strong>.
+            </p>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>Bạn nhận được email này vì bạn đã mua hàng tại Hương Cung Bookstore.</p>
+            <p style="margin-top: 10px;">
+                <strong>Hương Cung Bookstore</strong><br>
+                Địa chỉ: Số 123, Phố Sách, Hà Nội<br>
+                Website: <a href="https://huongcungbookstore.com">www.huongcungbookstore.com</a>
+            </p>
+        </div>
+    </div>
+</div>
+</body>
+</html>
