@@ -1,8 +1,10 @@
 package com.huongcung.catalogservice.catalog.service.impl;
 
-import com.huongcung.catalogservice.catalog.converter.BookDetailsConverter;
 import com.huongcung.catalogservice.catalog.enumeration.BookType;
 import com.huongcung.catalogservice.catalog.utils.BookUtils;
+import com.huongcung.catalogservice.client.InventoryClient;
+import com.huongcung.catalogservice.client.dto.StockBookDTO;
+import com.huongcung.catalogservice.client.dto.request.StockInitRequest;
 import com.huongcung.catalogservice.common.enumeration.City;
 import com.huongcung.catalogservice.common.enumeration.Language;
 import com.huongcung.catalogservice.catalog.model.dto.AuthorListDTO;
@@ -17,7 +19,6 @@ import com.huongcung.catalogservice.catalog.model.entity.*;
 import com.huongcung.catalogservice.catalog.repository.*;
 import com.huongcung.catalogservice.catalog.service.BackOfficeBookService;
 import com.huongcung.catalogservice.catalog.service.BookService;
-import com.huongcung.catalogservice.common.dto.PaginationInfo;
 import com.huongcung.catalogservice.media.enumeration.MediaStatus;
 import com.huongcung.catalogservice.media.model.dto.request.BulkUploadRequest;
 import com.huongcung.catalogservice.media.model.dto.request.UploadRequest;
@@ -28,12 +29,6 @@ import com.huongcung.catalogservice.search.model.dto.SearchRequest;
 import com.huongcung.catalogservice.search.model.dto.SearchResponse;
 import com.huongcung.catalogservice.search.service.SearchIndexService;
 import com.huongcung.catalogservice.search.service.SearchService;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
-import jakarta.persistence.criteria.CriteriaBuilder;
-import jakarta.persistence.criteria.CriteriaQuery;
-import jakarta.persistence.criteria.Predicate;
-import jakarta.persistence.criteria.Root;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Pageable;
@@ -70,6 +65,7 @@ public class BackOfficeBookServiceImpl implements BackOfficeBookService {
     private final TranslatorRepository translatorRepository;
     private final GenreRepository genreRepository;
     private final SearchService searchService;
+    private final InventoryClient inventoryClient;
 
     @Override
     public GetBookCatalogPageResponse getOrSearchBooks(Pageable pageable, String q, List<String> genres, List<Language> languages, List<BookType> bookTypes, List<City> cities, String sort) {
@@ -122,7 +118,7 @@ public class BackOfficeBookServiceImpl implements BackOfficeBookService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void createBook(BookCreateRequest request) {
         log.info("Creating book: title={}, physical={}, ebook={}",
                 request.getTitle(), request.getHasPhysicalEdition(), request.getHasElectricEdition());
@@ -160,6 +156,16 @@ public class BackOfficeBookServiceImpl implements BackOfficeBookService {
             savedBook.setPhysicalBookInfo(physicalBook);
 
             physicalBookRepository.save(physicalBook);
+
+            StockBookDTO bookDTO = new StockBookDTO();
+            bookDTO.setTitle(savedBook.getTitle());
+            bookDTO.setSku(physicalBook.getSku());
+            bookDTO.setIsbn(physicalBook.getIsbn());
+
+            StockInitRequest stockInitRequest = new StockInitRequest();
+            stockInitRequest.setBook(bookDTO);
+            stockInitRequest.setQuantity(0);
+            inventoryClient.initStock(stockInitRequest);
         }
 
         if (request.getHasElectricEdition()) {
@@ -270,7 +276,7 @@ public class BackOfficeBookServiceImpl implements BackOfficeBookService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void createOrUpdatePhysicalInfo(Long bookId, PhysicalBookUpdateRequest request) {
 
         log.info("Updating book ID: {}", bookId);
@@ -326,6 +332,16 @@ public class BackOfficeBookServiceImpl implements BackOfficeBookService {
             book.setPhysicalBookInfo(physicalBook);
             bookRepository.save(book);
         }
+
+        StockBookDTO bookDTO = new StockBookDTO();
+        bookDTO.setTitle(book.getTitle());
+        bookDTO.setSku(physicalBook.getSku());
+        bookDTO.setIsbn(physicalBook.getIsbn());
+
+        StockInitRequest stockInitRequest = new StockInitRequest();
+        stockInitRequest.setBook(bookDTO);
+        stockInitRequest.setQuantity(0);
+        inventoryClient.initStock(stockInitRequest);
 
         // Audit logging
         String changeLog = !changes.isEmpty() ? changes.toString() : "no changes";

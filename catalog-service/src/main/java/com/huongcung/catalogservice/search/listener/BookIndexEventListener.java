@@ -80,7 +80,7 @@ public class BookIndexEventListener {
             return;
         }
         
-        Long bookId = event.getBookId();
+        Long bookId = event.getBook().getId();
         if (bookId == null) {
             log.warn("Received BookUpdatedEvent with null bookId");
             return;

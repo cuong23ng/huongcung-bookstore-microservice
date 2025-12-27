@@ -32,13 +32,12 @@ public class BookIndexEventPublisher {
     
     /**
      * Publish event when a book is updated
-     * 
-     * @param bookId The ID of the updated book
+     *
      * @param book The updated book entity (can be null if only ID is available)
      */
-    public void publishBookUpdated(Long bookId, BookEntity book) {
-        log.debug("Publishing BookUpdatedEvent for book ID: {}", bookId);
-        eventPublisher.publishEvent(new BookUpdatedEvent(this, bookId, book));
+    public void publishBookUpdated(BookEntity book) {
+        log.debug("Publishing BookUpdatedEvent for book ID: {}", book.getId());
+        eventPublisher.publishEvent(new BookUpdatedEvent(this, book));
     }
     
     /**

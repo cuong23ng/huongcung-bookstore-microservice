@@ -14,6 +14,10 @@ public class RouterValidator {
             "/api/auth/login",
             "/api/auth/logout",
             "/api/catalog/books",
+            "/api/payment/create", // test
+            "/api/payment/create-url",// test
+            "/api/payment/update",// test
+            "/api/payment/vnpay-ipn",
             "/eureka"
     );
 

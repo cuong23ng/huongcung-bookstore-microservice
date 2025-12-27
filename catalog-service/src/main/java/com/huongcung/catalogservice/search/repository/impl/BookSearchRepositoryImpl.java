@@ -109,8 +109,8 @@ public class BookSearchRepositoryImpl implements BookSearchRepository {
     public void index(BookSearchDocument document) throws Exception {
         try {
             SolrInputDocument solrDoc = buildSolrDocument(document);
-            solrClient.add(solrConfig.getCore(), solrDoc);
-            solrClient.commit(solrConfig.getCore());
+            getSolrClient().add(solrConfig.getCore(), solrDoc);
+            getSolrClient().commit(solrConfig.getCore());
         } catch (Exception e) {
             log.error("Failed to index document {}: {}", document.getId(), e.getMessage());
             throw e;

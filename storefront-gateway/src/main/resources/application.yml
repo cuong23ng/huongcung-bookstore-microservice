@@ -37,6 +37,13 @@ spring:
               predicates:
                 - Path=/api/auth/**
 
+            - id: payment-service
+              uri: lb://payment-service
+              predicates:
+                - Path=/api/payment/**
+              filters:
+                - AuthenticationFilter
+
   cache:
     type: redis
     redis:

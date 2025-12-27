@@ -73,7 +73,7 @@ public class StaffAuthService implements AuthService {
                 request.getStaffType() == StaffType.WAREHOUSE_MANAGER ||
                 request.getStaffType() == StaffType.WAREHOUSE_STAFF) {
 
-            if (StringUtils.hasLength(request.getStaffType().name())) {
+            if (request.getCity() == null) {
                 throw new IllegalArgumentException("assignedCity is required when staffType is " + request.getStaffType());
             }
 

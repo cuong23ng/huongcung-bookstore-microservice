@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Solr Configuration for Huong Cung Bookstore - Stock Level Core
+  Optimized for search performance and Vietnamese language support
+-->
+<config>
+  <luceneMatchVersion>9.7.0</luceneMatchVersion>
+  
+  <dataDir>${solr.data.dir:}</dataDir>
+  
+  <directoryFactory name="DirectoryFactory" class="${solr.directoryFactory:solr.NRTCachingDirectoryFactory}"/>
+  
+  <codecFactory class="solr.SchemaCodecFactory"/>
+  
+  <!-- Use classic schema.xml instead of managed schema -->
+  <schemaFactory class="ClassicIndexSchemaFactory"/>
+  
+  <indexConfig>
+    <!-- Lock factory for index -->
+    <lockType>${solr.lock.type:native}</lockType>
+    
+    <!-- Index writer settings -->
+    <infoStream>false</infoStream>
+    
+    <!-- Merge policy -->
+    <mergePolicyFactory class="org.apache.solr.index.TieredMergePolicyFactory">
+      <int name="maxMergeAtOnce">10</int>
+      <int name="segmentsPerTier">10</int>
+      <int name="maxMergedSegmentMB">512</int>
+    </mergePolicyFactory>
+    
+    <!-- Merge scheduler -->
+    <mergeScheduler class="org.apache.lucene.index.ConcurrentMergeScheduler"/>
+    
+    <!-- RAM buffer size for indexing -->
+    <ramBufferSizeMB>100</ramBufferSizeMB>
+    
+    <!-- Max buffered docs -->
+    <maxBufferedDocs>1000</maxBufferedDocs>
+    
+    <!-- Use compound file format -->
+    <useCompoundFile>true</useCompoundFile>
+  </indexConfig>
+  
+  <!-- JMX configuration -->
+  <jmx />
+  
+  <!-- Update request processor chain -->
+  <updateRequestProcessorChain name="add-unknown-fields-to-the-schema" default="true">
+    <processor class="solr.LogUpdateProcessorFactory"/>
+    <processor class="solr.DistributedUpdateProcessorFactory"/>
+    <processor class="solr.RunUpdateProcessorFactory"/>
+  </updateRequestProcessorChain>
+  
+  <!-- Request handlers -->
+  
+  <!-- Standard request handler -->
+  <requestHandler name="/select" class="solr.SearchHandler">
+    <lst name="defaults">
+      <str name="echoParams">explicit</str>
+      <int name="rows">10</int>
+      <str name="df">bookTitle</str>
+    </lst>
+    <arr name="last-components">
+      <str>spellcheck</str>
+    </arr>
+  </requestHandler>
+  
+  <!-- Update request handler -->
+  <requestHandler name="/update" class="solr.UpdateRequestHandler">
+    <lst name="defaults">
+      <str name="update.chain">add-unknown-fields-to-the-schema</str>
+    </lst>
+  </requestHandler>
+  
+  <!-- Admin handlers -->
+  <requestHandler name="c" class="solr.PingRequestHandler">
+    <lst name="defaults">
+      <str name="qt">/select</str>
+      <str name="q">solrpingquery</str>
+    </lst>
+  </requestHandler>
+  
+  <!-- Search components -->
+  
+  <!-- Highlighting component -->
+  <searchComponent name="highlight" class="solr.HighlightComponent">
+    <lst name="defaults">
+      <str name="hl">on</str>
+      <str name="hl.fl">bookTitle,bookTitleVn</str>
+      <str name="hl.snippets">3</str>
+      <str name="hl.fragsize">200</str>
+      <str name="hl.method">unified</str>
+    </lst>
+  </searchComponent>
+  
+  <!-- Faceting component -->
+  <searchComponent name="facet" class="solr.FacetComponent"/>
+  
+  <!-- Spell check component -->
+  <searchComponent name="spellcheck" class="solr.SpellCheckComponent">
+    <str name="queryAnalyzerFieldType">text_vi</str>
+    <lst name="spellchecker">
+      <str name="name">default</str>
+      <str name="field">bookTitleVn</str>
+      <str name="classname">solr.DirectSolrSpellChecker</str>
+      <str name="distanceMeasure">internal</str>
+      <float name="accuracy">0.5</float>
+      <int name="maxEdits">2</int>
+      <int name="minPrefix">1</int>
+      <int name="maxInspections">5</int>
+      <int name="minQueryLength">4</int>
+      <float name="maxQueryFrequency">0.01</float>
+      <float name="thresholdTokenFrequency">.01</float>
+    </lst>
+  </searchComponent>
+  
+  <!-- Query parsers -->
+  <!-- Note: ExtendedDisMax parser is available by default in Solr 9.x, no need to declare -->
+  
+  <!-- Caching -->
+  
+  <!-- Filter cache -->
+  <filterCache class="solr.FastLRUCache"
+               size="512"
+               initialSize="512"
+               autowarmCount="128"/>
+  
+  <!-- Query result cache -->
+  <queryResultCache class="solr.LRUCache"
+                    size="512"
+                    initialSize="512"
+                    autowarmCount="128"/>
+  
+  <!-- Document cache -->
+  <documentCache class="solr.LRUCache"
+                 size="512"
+                 initialSize="512"
+                 autowarmCount="0"/>
+  
+  <!-- Field value cache -->
+  <cache name="perSegFilter" class="solr.search.LRUCache" size="10" initialSize="0" autowarmCount="10" regenerator="solr.NoOpRegenerator" />
+  
+  <!-- Auto-warming -->
+  <useColdSearcher>false</useColdSearcher>
+  <maxWarmingSearchers>2</maxWarmingSearchers>
+  
+</config>

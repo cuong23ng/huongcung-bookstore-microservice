@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Solr Schema for Huong Cung Bookstore - Stock Level Core
+  Configured for Vietnamese language support and faceted search
+-->
+<schema name="stock-levels" version="1.6">
+  <uniqueKey>id</uniqueKey>
+
+  <!-- Field Types -->
+  
+  <!-- Standard string field type -->
+  <fieldType name="string" class="solr.StrField" sortMissingLast="true" />
+  
+  <!-- Standard integer field type -->
+  <fieldType name="pint" class="solr.IntPointField" docValues="true"/>
+  
+  <!-- Standard double field type -->
+  <fieldType name="pdouble" class="solr.DoublePointField" docValues="true"/>
+  
+  <!-- Standard date field type -->
+  <fieldType name="pdate" class="solr.DatePointField" docValues="true"/>
+  
+  <!-- Boolean field type -->
+  <fieldType name="boolean" class="solr.BoolField"/>
+
+  <!-- General text field with standard analysis -->
+  <fieldType name="text_general" class="solr.TextField" positionIncrementGap="100" multiValued="true">
+    <analyzer type="index">
+      <tokenizer class="solr.StandardTokenizerFactory"/>
+      <filter class="solr.LowerCaseFilterFactory"/>
+      <filter class="solr.StopFilterFactory" words="stopwords.txt" ignoreCase="true"/>
+    </analyzer>
+    <analyzer type="query">
+      <tokenizer class="solr.StandardTokenizerFactory"/>
+      <filter class="solr.LowerCaseFilterFactory"/>
+      <filter class="solr.StopFilterFactory" words="stopwords.txt" ignoreCase="true"/>
+      <filter class="solr.SynonymGraphFilterFactory" synonyms="synonyms.txt" ignoreCase="true" expand="true"/>
+    </analyzer>
+  </fieldType>
+
+  <!-- Vietnamese text field type with diacritic-insensitive search -->
+  <fieldType name="text_vi" class="solr.TextField" positionIncrementGap="100" multiValued="true">
+    <analyzer type="index">
+      <tokenizer class="solr.StandardTokenizerFactory"/>
+      <filter class="solr.LowerCaseFilterFactory"/>
+      <!-- Vietnamese diacritic removal for flexible search -->
+      <filter class="solr.ASCIIFoldingFilterFactory"/>
+      <filter class="solr.StopFilterFactory" words="stopwords.txt" ignoreCase="true"/>
+    </analyzer>
+    <analyzer type="query">
+      <tokenizer class="solr.StandardTokenizerFactory"/>
+      <filter class="solr.LowerCaseFilterFactory"/>
+      <!-- Vietnamese diacritic removal for query matching -->
+      <filter class="solr.ASCIIFoldingFilterFactory"/>
+      <filter class="solr.StopFilterFactory" words="stopwords.txt" ignoreCase="true"/>
+      <filter class="solr.SynonymGraphFilterFactory" synonyms="synonyms.txt" ignoreCase="true" expand="true"/>
+    </analyzer>
+  </fieldType>
+
+  <!-- Fields -->
+  
+  <!-- Core identification -->
+  <field name="id" type="string" indexed="true" stored="true" required="true"/>
+  <field name="bookTitle" type="text_general" indexed="true" stored="true" multiValued="false"/>
+  <field name="bookTitleVn" type="text_vi" indexed="true" stored="false" multiValued="false"/>
+  <field name="sku" type="string" indexed="true" stored="true" multiValued="false"/>
+  <field name="isbn" type="string" indexed="true" stored="true" multiValued="false"/>
+  <field name="city" type="string" indexed="true" stored="true" multiValued="false"/>
+  <field name="warehouseCode" type="string" indexed="true" stored="true" multiValued="false"/>
+  <field name="status" type="string" indexed="true" stored="true" multiValued="false"/>
+  <field name="createdAt" type="pdate" indexed="true" stored="true" multiValued="false"/>
+  <field name="lastRestocked" type="pdate" indexed="true" stored="true" multiValued="false"/>
+
+  <!-- Dynamic fields for future extensibility -->
+  <dynamicField name="*_s" type="string" indexed="true" stored="true" multiValued="false"/>
+  <dynamicField name="*_ss" type="string" indexed="true" stored="true" multiValued="true"/>
+  <dynamicField name="*_i" type="pint" indexed="true" stored="true" multiValued="false"/>
+  <dynamicField name="*_is" type="pint" indexed="true" stored="true" multiValued="true"/>
+  <dynamicField name="*_d" type="pdouble" indexed="true" stored="true" multiValued="false"/>
+  <dynamicField name="*_ds" type="pdouble" indexed="true" stored="true" multiValued="true"/>
+  <dynamicField name="*_b" type="boolean" indexed="true" stored="true" multiValued="false"/>
+  <dynamicField name="*_dt" type="pdate" indexed="true" stored="true" multiValued="false"/>
+</schema>

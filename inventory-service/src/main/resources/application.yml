@@ -1,0 +1,68 @@
+server:
+  port: ${PORT}
+
+spring:
+  application:
+    name: inventory-service
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        use_sql_comments: true
+  datasource:
+    driver-class-name: ${JDBC_DATABASE_DRIVER:}
+    url: jdbc:mysql://${JDBC_DATABASE_HOST:}:${JDBC_DATABASE_PORT:}/${JDBC_DATABASE_NAME:}?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: ${JDBC_DATABASE_USERNAME:}
+    password: ${JDBC_DATABASE_PASSWORD:}
+  cache:
+    type: redis
+    redis:
+      time-to-live: 3600000
+      cache-null-values: false
+      use-key-prefix: true
+      key-prefix: "bookstore:cache:"
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: -1ms
+
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:}
+    consumer:
+      group-id: inventory-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+        spring.json.use.type.headers: false
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: ${JWT_EXPIRATION}
+  tokenPrefix: "Bearer "
+  headerName: "Authorization"
+
+solr:
+  host: ${SOLR_HOST:localhost}
+  port: ${SOLR_PORT:8983}
+  core: ${SOLR_CORE_NAME:}
+  connection-timeout: 5000
+  socket-timeout: 10000
+  indexing:
+    batch-size: ${SOLR_INDEXING_BATCH_SIZE:1000}
+    enabled: ${SOLR_INDEXING_ENABLED:true}
+    retry:
+      max-attempts: ${SOLR_INDEXING_RETRY_MAX_ATTEMPTS:3}
+      delay-ms: ${SOLR_INDEXING_RETRY_DELAY_MS:1000}

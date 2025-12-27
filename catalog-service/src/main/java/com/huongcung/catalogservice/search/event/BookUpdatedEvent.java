@@ -9,13 +9,11 @@ import org.springframework.context.ApplicationEvent;
  */
 @Getter
 public class BookUpdatedEvent extends ApplicationEvent {
-    
-    private final Long bookId;
+
     private final BookEntity book;
     
-    public BookUpdatedEvent(Object source, Long bookId, BookEntity book) {
+    public BookUpdatedEvent(Object source, BookEntity book) {
         super(source);
-        this.bookId = bookId;
         this.book = book;
     }
 }

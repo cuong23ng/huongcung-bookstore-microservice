@@ -18,6 +18,7 @@ services:
     depends_on:
       - discovery-server
       - identity-service
+      - payment-service
       - catalog-service
       - redis
     env_file:
@@ -101,22 +102,66 @@ services:
     networks:
       - platform-network
     command: --bind-address=0.0.0.0 --default-authentication-plugin=mysql_native_password
+    
+  inventory-mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: hungcuong
+      MYSQL_DATABASE: huongcungbookstore
+    ports:
+      - "3310:3306"
+    volumes:
+      - inventory-mysql-data:/var/lib/mysql
+      - ./init-mysql.sql:/docker-entrypoint-initdb.d/init-mysql.sql
+    networks:
+      - platform-network
+    command: --bind-address=0.0.0.0 --default-authentication-plugin=mysql_native_password
 
   phpmyadmin:
     image: phpmyadmin/phpmyadmin:latest
     environment:
       # Cấu hình để hiển thị cả hai MySQL server
-      PMA_HOSTS: catalog-mysql, identity-mysql
-      PMA_VERBOSES: "Catalog, Identity"
-      PMA_PORTS: 3306, 3306
+      PMA_HOSTS: catalog-mysql, identity-mysql, payment-mysql, inventory-mysql
+      PMA_VERBOSES: "Catalog, Identity, Payment, Inventory"
+      PMA_PORTS: 3306, 3306, 3306, 3306
       PMA_USER: root
       PMA_PASSWORD: hungcuong
     ports:
       - "8089:80"
     depends_on:
       - catalog-mysql
+      - identity-mysql
+      - payment-mysql
+      - inventory-mysql
     networks:
       - platform-network
+  
+  payment-service:
+    build: ./payment-service
+    ports:
+      - "8086:8080"
+    env_file:
+      - ./payment-service/docker.env
+    depends_on:
+      - payment-mysql
+      - discovery-server
+    networks:
+      - platform-network
+    restart: unless-stopped
+
+  payment-mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: hungcuong
+      MYSQL_DATABASE: huongcungbookstore
+    ports:
+      - "3309:3306"
+    volumes:
+      - payment-mysql-data:/var/lib/mysql
+      - ./init-mysql.sql:/docker-entrypoint-initdb.d/init-mysql.sql
+    networks:
+      - platform-network
+    command: --bind-address=0.0.0.0 --default-authentication-plugin=mysql_native_password
 
   minio:
     image: minio/minio:latest
@@ -140,30 +185,36 @@ services:
       - "8983:8983"
     volumes:
       - solr-data:/var/solr
-      - ./catalog-service/src/main/resources/solr/books:/opt/solr-config:ro
+      - ./catalog-service/src/main/resources/solr/books:/opt/solr-config-books:ro
+      - ./inventory-service/src/main/resources/solr/stock-levels:/opt/solr-config-stock-levels:ro
     networks:
       - platform-network
     environment:
       SOLR_HEAP: 512m
-      SOLR_CORE_NAME: ${SOLR_CORE_NAME:-books}
     command:
       - bash
       - -c
       - |
-        # Create core with default config first (if it doesn't exist)
-        if [ ! -d "/var/solr/data/${SOLR_CORE_NAME:-books}" ]; then
-          docker-entrypoint.sh solr-precreate ${SOLR_CORE_NAME:-books}
+        # Create books core with default config first (if it doesn't exist)
+        if [ ! -d "/var/solr/data/books" ]; then
+          docker-entrypoint.sh solr-precreate books
         fi
         
-        # Copy custom config files
-        echo "Copying custom schema and config..."
-        cp -r /opt/solr-config/* /var/solr/data/${SOLR_CORE_NAME:-books}/conf/
+        # Copy custom config files for books core
+        echo "Copying custom schema and config for books core..."
+        cp -r /opt/solr-config-books/* /var/solr/data/books/conf/
+        
+        # Create stock-levels core with default config first (if it doesn't exist)
+        if [ ! -d "/var/solr/data/stock-levels" ]; then
+          docker-entrypoint.sh solr-precreate stock-levels
+        fi
+        
+        # Copy custom config files for stock-levels core
+        echo "Copying custom schema and config for stock-levels core..."
+        cp -r /opt/solr-config-stock-levels/* /var/solr/data/stock-levels/conf/
         
         # Start Solr
         exec docker-entrypoint.sh solr-foreground
-  
-  
-
 
   redis:
     image: redis:7-alpine
@@ -220,6 +271,8 @@ volumes:
   mysql-data:
   catalog-mysql-data:
   identity-mysql-data:
+  payment-mysql-data:
+  inventory-mysql-data:
   minio-data:
   solr-data:
   redis-data:

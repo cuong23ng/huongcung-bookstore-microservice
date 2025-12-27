@@ -49,7 +49,7 @@ public class BookEntityListener {
     public void postUpdate(BookEntity book) {
         if (eventPublisher != null && book != null) {
             log.debug("AbstractBookEntity updated, publishing BookUpdatedEvent for book ID: {}", book.getId());
-            eventPublisher.publishEvent(new BookUpdatedEvent(this, book.getId(), book));
+            eventPublisher.publishEvent(new BookUpdatedEvent(this, book));
         } else if (eventPublisher == null) {
             log.warn("ApplicationEventPublisher not initialized in BookEntityListener");
         }

@@ -21,6 +21,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -110,6 +111,7 @@ public class BackOfficeBookCatalogController {
 
 
     @PostMapping("/create")
+    @PreAuthorize("hasAnyRole('ROLE_ADMIN')")
     public ResponseEntity<BaseResponse> createBook(@Valid @RequestBody BookCreateRequest request) {
         log.info("Creating book: title={}, physical={}, ebook={}"
                 , request.getTitle(), request.getHasPhysicalEdition(), request.getHasElectricEdition());
@@ -125,6 +127,7 @@ public class BackOfficeBookCatalogController {
     }
 
     @PostMapping("/{id}/update")
+    @PreAuthorize("hasAnyRole('ROLE_ADMIN')")
     public ResponseEntity<BaseResponse> updateBook(
             @PathVariable Long id,
             @Valid @RequestBody BookUpdateRequest request) {
@@ -141,6 +144,7 @@ public class BackOfficeBookCatalogController {
     }
 
     @PostMapping("/{id}/create-update/physical")
+    @PreAuthorize("hasAnyRole('ROLE_ADMIN')")
     public ResponseEntity<BaseResponse> createUpdatePhysicalBook(
             @PathVariable Long id,
             @Valid @RequestBody PhysicalBookUpdateRequest request) {
@@ -157,6 +161,7 @@ public class BackOfficeBookCatalogController {
     }
 
     @PostMapping("/{id}/create-update/ebook")
+    @PreAuthorize("hasAnyRole('ROLE_ADMIN')")
     public ResponseEntity<BaseResponse> createUpdateEBook(
             @PathVariable Long id,
             @Valid @RequestBody EbookUpdateRequest request) {
@@ -181,6 +186,7 @@ public class BackOfficeBookCatalogController {
      */
     @PostMapping("/{id}/images")
     @Deprecated
+    @PreAuthorize("hasAnyRole('ROLE_ADMIN')")
     public ResponseEntity<BaseResponse> uploadBookImages(
             @PathVariable Long id,
             @RequestParam("files") MultipartFile[] files) {
